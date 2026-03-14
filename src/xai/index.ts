@@ -1,5 +1,6 @@
 export { XaiClient, createXaiClient, type XaiClientConfig } from "./client"
 export { XaiStream, type StreamInput } from "./stream"
 export { chunkToEvents, toXaiMessages, toXaiTools } from "./convert"
+export { adaptXaiStream, wrapAsFullStream } from "./adapter"
 export type { StreamEvent } from "./events"
 export * from "./types"

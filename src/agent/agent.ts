@@ -1,12 +1,14 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, streamObject, type ModelMessage } from "@/ai-stub"
+import type { ModelMessage } from "@/ai-stub"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncation"
 import { Auth } from "../auth"
 import { ProviderTransform } from "../provider/transform"
+import { createXaiClient } from "@/xai/client"
+import { Env } from "@/env"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -281,59 +283,53 @@ export namespace Agent {
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
-    const cfg = await Config.get()
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
-    const language = await Provider.getLanguage(model)
+    const provider = await Provider.getProvider(defaultModel.providerID)
 
     const system = [PROMPT_GENERATE]
     await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
     const existing = await list()
 
-    const params = {
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-        },
+    const apiKey = provider?.key ?? Env.get("XAI_API_KEY")
+    const baseUrl = model.api.url ?? provider?.options?.baseURL
+    const client = createXaiClient({ apiKey: apiKey!, baseUrl })
+
+    const schema = {
+      type: "object" as const,
+      properties: {
+        identifier: { type: "string" as const },
+        whenToUse: { type: "string" as const },
+        systemPrompt: { type: "string" as const },
       },
-      temperature: 0.3,
+      required: ["identifier", "whenToUse", "systemPrompt"],
+    }
+
+    const response = await client.chat({
+      model: model.api.id,
       messages: [
-        ...system.map(
-          (item): ModelMessage => ({
-            role: "system",
-            content: item,
-          }),
-        ),
+        ...system.map((item) => ({
+          role: "system" as const,
+          content: item,
+        })),
         {
-          role: "user",
+          role: "user" as const,
           content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
         },
       ],
-      model: language,
-      schema: z.object({
-        identifier: z.string(),
-        whenToUse: z.string(),
-        systemPrompt: z.string(),
-      }),
-    } satisfies Parameters<typeof generateObject>[0]
+      temperature: 0.3,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "agent_config",
+          schema,
+          strict: true,
+        },
+      },
+    })
 
-    if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
-      const result = streamObject({
-        ...params,
-        providerOptions: ProviderTransform.providerOptions(model, {
-          instructions: SystemPrompt.instructions(),
-          store: false,
-        }),
-        onError: () => {},
-      })
-      for await (const part of result.fullStream) {
-        if (part.type === "error") throw part.error
-      }
-      return result.object
-    }
-
-    const result = await generateObject(params)
-    return result.object
+    const content = response.choices[0]?.message?.content
+    if (!content) throw new Error("No content in response")
+    return JSON.parse(content) as { identifier: string; whenToUse: string; systemPrompt: string }
   }
 }

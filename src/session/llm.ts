@@ -2,10 +2,7 @@ import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import {
-  streamText,
-  wrapLanguageModel,
   type ModelMessage,
-  type StreamTextResult,
   type Tool,
   type ToolSet,
   tool,
@@ -14,14 +11,14 @@ import {
 import { mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
-import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
-import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
-import { Auth } from "@/auth"
+import { XaiStream } from "@/xai/stream"
+import { adaptXaiStream, wrapAsFullStream } from "@/xai/adapter"
+import { Env } from "@/env"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -41,7 +38,7 @@ export namespace LLM {
     toolChoice?: "auto" | "required" | "none"
   }
 
-  export type StreamOutput = StreamTextResult<ToolSet, unknown>
+  export type StreamOutput = { fullStream: AsyncIterable<any> }
 
   export async function stream(input: StreamInput) {
     const l = log
@@ -56,23 +53,16 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
+    const [cfg, provider] = await Promise.all([
       Config.get(),
       Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
     ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
-    const system = []
+    const system: string[] = []
     system.push(
       [
-        // use agent prompt otherwise provider prompt
-        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
-        // any custom prompt passed into this call
+        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
         ...input.system,
-        // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
       ]
         .filter((x) => x)
@@ -85,7 +75,6 @@ export namespace LLM {
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
-    // rejoin to maintain 2-part structure for caching if header unchanged
     if (system.length > 2 && system[0] === header) {
       const rest = system.slice(1)
       system.length = 0
@@ -107,9 +96,6 @@ export namespace LLM {
       mergeDeep(input.agent.options),
       mergeDeep(variant),
     )
-    if (isCodex) {
-      options.instructions = SystemPrompt.instructions()
-    }
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -130,98 +116,18 @@ export namespace LLM {
       },
     )
 
-    const { headers } = await Plugin.trigger(
-      "chat.headers",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        headers: {},
-      },
-    )
-
-    const maxOutputTokens =
-      isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
-
+    const maxOutputTokens = ProviderTransform.maxOutputTokens(input.model)
     const tools = await resolveTools(input)
 
-    // LiteLLM and some Anthropic proxies require the tools parameter to be present
-    // when message history contains tool calls, even if no tools are being used.
-    // Add a dummy tool that is never called to satisfy this validation.
-    // This is enabled for:
-    // 1. Providers with "litellm" in their ID or API ID (auto-detected)
-    // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
-    const isLiteLLMProxy =
-      provider.options?.["litellmProxy"] === true ||
-      input.model.providerID.toLowerCase().includes("litellm") ||
-      input.model.api.id.toLowerCase().includes("litellm")
+    // Get API key from provider or environment
+    const apiKey = provider?.key ?? Env.get("XAI_API_KEY")
 
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
-      tools["_noop"] = tool({
-        description:
-          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
-        inputSchema: jsonSchema({ type: "object", properties: {} }),
-        execute: async () => ({ output: "", title: "", metadata: {} }),
-      })
-    }
+    // Get base URL from model API URL or provider options
+    const baseUrl = input.model.api.url ?? provider?.options?.baseURL ?? undefined
 
-    return streamText({
-      onError(error: any) {
-        l.error("stream error", {
-          error,
-        })
-      },
-      async experimental_repairToolCall(failed: any) {
-        const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
-          l.info("repairing tool call", {
-            tool: failed.toolCall.toolName,
-            repaired: lower,
-          })
-          return {
-            ...failed.toolCall,
-            toolName: lower,
-          }
-        }
-        return {
-          ...failed.toolCall,
-          input: JSON.stringify({
-            tool: failed.toolCall.toolName,
-            error: failed.error.message,
-          }),
-          toolName: "invalid",
-        }
-      },
-      temperature: params.temperature,
-      topP: params.topP,
-      topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
-      toolChoice: input.toolChoice,
-      maxOutputTokens,
-      abortSignal: input.abort,
-      headers: {
-        ...(input.model.providerID.startsWith("opencode")
-          ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": input.user.id,
-              "x-opencode-client": Flag.OPENCODE_CLIENT,
-            }
-          : input.model.providerID !== "anthropic"
-            ? {
-                "User-Agent": `opencode/${Installation.VERSION}`,
-              }
-            : undefined),
-        ...input.model.headers,
-        ...headers,
-      },
-      maxRetries: input.retries ?? 0,
+    // Use xAI native streaming
+    const xaiStream = XaiStream.stream({
+      model: input.model.api.id,
       messages: [
         ...system.map(
           (x): ModelMessage => ({
@@ -231,27 +137,20 @@ export namespace LLM {
         ),
         ...input.messages,
       ],
-      model: wrapLanguageModel({
-        model: language,
-        middleware: [
-          {
-            async transformParams(args: any) {
-              if (args.type === "stream") {
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
-              }
-              return args.params
-            },
-          },
-        ],
-      }),
-      experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
-        metadata: {
-          userId: cfg.username ?? "unknown",
-          sessionId: input.sessionID,
-        },
-      },
+      tools,
+      maxTokens: maxOutputTokens,
+      temperature: params.temperature,
+      topP: params.topP,
+      reasoningEffort: options.reasoningEffort,
+      abortSignal: input.abort,
+      apiKey,
+      baseUrl,
+      providerOptions: options,
     })
+
+    // Adapt xAI events to AI SDK-style events for processor.ts
+    const adapted = adaptXaiStream(xaiStream)
+    return wrapAsFullStream(adapted)
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
@@ -264,8 +163,6 @@ export namespace LLM {
     return input.tools
   }
 
-  // Check if messages contain any tool-call content
-  // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
   export function hasToolCalls(messages: ModelMessage[]): boolean {
     for (const msg of messages) {
       if (!Array.isArray(msg.content)) continue
