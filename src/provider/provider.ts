@@ -1,0 +1,487 @@
+import z from "zod"
+import fuzzysort from "fuzzysort"
+import { Config } from "../config/config"
+import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
+import { NoSuchModelError } from "@/ai-stub"
+import { Log } from "../util/log"
+import { NamedError } from "@opencode-ai/util/error"
+import { ModelsDev } from "./models"
+import { Env } from "../env"
+import { Instance } from "../project/instance"
+import { Flag } from "../flag/flag"
+import { iife } from "@/util/iife"
+import { Global } from "../global"
+import path from "path"
+import { Filesystem } from "../util/filesystem"
+import { ProviderTransform } from "./transform"
+import { Plugin } from "../plugin"
+import { Auth } from "../auth"
+
+export namespace Provider {
+  const log = Log.create({ service: "provider" })
+
+  export const Model = z
+    .object({
+      id: z.string(),
+      providerID: z.string(),
+      api: z.object({
+        id: z.string(),
+        url: z.string(),
+        npm: z.string(),
+      }),
+      name: z.string(),
+      family: z.string().optional(),
+      capabilities: z.object({
+        temperature: z.boolean(),
+        reasoning: z.boolean(),
+        attachment: z.boolean(),
+        toolcall: z.boolean(),
+        input: z.object({
+          text: z.boolean(),
+          audio: z.boolean(),
+          image: z.boolean(),
+          video: z.boolean(),
+          pdf: z.boolean(),
+        }),
+        output: z.object({
+          text: z.boolean(),
+          audio: z.boolean(),
+          image: z.boolean(),
+          video: z.boolean(),
+          pdf: z.boolean(),
+        }),
+        interleaved: z.union([
+          z.boolean(),
+          z.object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          }),
+        ]),
+      }),
+      cost: z.object({
+        input: z.number(),
+        output: z.number(),
+        cache: z.object({
+          read: z.number(),
+          write: z.number(),
+        }),
+        experimentalOver200K: z
+          .object({
+            input: z.number(),
+            output: z.number(),
+            cache: z.object({
+              read: z.number(),
+              write: z.number(),
+            }),
+          })
+          .optional(),
+      }),
+      limit: z.object({
+        context: z.number(),
+        input: z.number().optional(),
+        output: z.number(),
+      }),
+      status: z.enum(["alpha", "beta", "deprecated", "active"]),
+      options: z.record(z.string(), z.any()),
+      headers: z.record(z.string(), z.string()),
+      release_date: z.string(),
+      variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+    })
+    .meta({
+      ref: "Model",
+    })
+  export type Model = z.infer<typeof Model>
+
+  export const Info = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      source: z.enum(["env", "config", "custom", "api"]),
+      env: z.string().array(),
+      key: z.string().optional(),
+      options: z.record(z.string(), z.any()),
+      models: z.record(z.string(), Model),
+    })
+    .meta({
+      ref: "Provider",
+    })
+  export type Info = z.infer<typeof Info>
+
+  function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+    const m: Model = {
+      id: model.id,
+      providerID: provider.id,
+      name: model.name,
+      family: model.family,
+      api: {
+        id: model.id,
+        url: model.provider?.api ?? provider.api!,
+        npm: model.provider?.npm ?? provider.npm ?? "xai-native",
+      },
+      status: model.status ?? "active",
+      headers: model.headers ?? {},
+      options: model.options ?? {},
+      cost: {
+        input: model.cost?.input ?? 0,
+        output: model.cost?.output ?? 0,
+        cache: {
+          read: model.cost?.cache_read ?? 0,
+          write: model.cost?.cache_write ?? 0,
+        },
+        experimentalOver200K: model.cost?.context_over_200k
+          ? {
+              cache: {
+                read: model.cost.context_over_200k.cache_read ?? 0,
+                write: model.cost.context_over_200k.cache_write ?? 0,
+              },
+              input: model.cost.context_over_200k.input,
+              output: model.cost.context_over_200k.output,
+            }
+          : undefined,
+      },
+      limit: {
+        context: model.limit.context,
+        input: model.limit.input,
+        output: model.limit.output,
+      },
+      capabilities: {
+        temperature: model.temperature,
+        reasoning: model.reasoning,
+        attachment: model.attachment,
+        toolcall: model.tool_call,
+        input: {
+          text: model.modalities?.input?.includes("text") ?? true,
+          audio: model.modalities?.input?.includes("audio") ?? false,
+          image: model.modalities?.input?.includes("image") ?? true,
+          video: model.modalities?.input?.includes("video") ?? false,
+          pdf: model.modalities?.input?.includes("pdf") ?? true,
+        },
+        output: {
+          text: model.modalities?.output?.includes("text") ?? true,
+          audio: model.modalities?.output?.includes("audio") ?? false,
+          image: model.modalities?.output?.includes("image") ?? false,
+          video: model.modalities?.output?.includes("video") ?? false,
+          pdf: model.modalities?.output?.includes("pdf") ?? false,
+        },
+        interleaved: model.interleaved ?? false,
+      },
+      release_date: model.release_date,
+      variants: {},
+    }
+
+    m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
+
+    return m
+  }
+
+  export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    return {
+      id: provider.id,
+      source: "custom",
+      name: provider.name,
+      env: provider.env ?? [],
+      options: {},
+      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+    }
+  }
+
+  const state = Instance.state(async () => {
+    using _ = log.time("state")
+    const config = await Config.get()
+    const modelsDev = await ModelsDev.get()
+    const database = mapValues(modelsDev, fromModelsDevProvider)
+
+    const providers: { [providerID: string]: Info } = {}
+
+    log.info("init")
+
+    const configProviders = Object.entries(config.provider ?? {})
+
+    function mergeProvider(providerID: string, provider: Partial<Info>) {
+      const existing = providers[providerID]
+      if (existing) {
+        // @ts-expect-error
+        providers[providerID] = mergeDeep(existing, provider)
+        return
+      }
+      const match = database[providerID]
+      if (!match) return
+      // @ts-expect-error
+      providers[providerID] = mergeDeep(match, provider)
+    }
+
+    // extend database from config
+    for (const [providerID, provider] of configProviders) {
+      const existing = database[providerID]
+      const parsed: Info = {
+        id: providerID,
+        name: provider.name ?? existing?.name ?? providerID,
+        env: provider.env ?? existing?.env ?? [],
+        options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+        source: "config",
+        models: existing?.models ?? {},
+      }
+
+      for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+        const existingModel = parsed.models[model.id ?? modelID]
+        const name = iife(() => {
+          if (model.name) return model.name
+          if (model.id && model.id !== modelID) return modelID
+          return existingModel?.name ?? modelID
+        })
+        const parsedModel: Model = {
+          id: modelID,
+          api: {
+            id: model.id ?? existingModel?.api.id ?? modelID,
+            npm: model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? "xai-native",
+            url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
+          },
+          status: model.status ?? existingModel?.status ?? "active",
+          name,
+          providerID,
+          capabilities: {
+            temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+            reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+            attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
+            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
+            input: {
+              text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
+              audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
+              image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+              video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
+            },
+            output: {
+              text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
+              audio: model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
+              image: model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
+              video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
+            },
+            interleaved: model.interleaved ?? false,
+          },
+          cost: {
+            input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
+            output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
+            cache: {
+              read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+              write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
+            },
+          },
+          options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
+          limit: {
+            context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+            output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+          },
+          headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+          family: model.family ?? existingModel?.family ?? "",
+          release_date: model.release_date ?? existingModel?.release_date ?? "",
+          variants: {},
+        }
+        const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
+        parsedModel.variants = mapValues(
+          pickBy(merged, (v) => !v.disabled),
+          (v) => omit(v, ["disabled"]),
+        )
+        parsed.models[modelID] = parsedModel
+      }
+      database[providerID] = parsed
+    }
+
+    // load env - look for XAI_API_KEY
+    const env = Env.all()
+    for (const [providerID, provider] of Object.entries(database)) {
+      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
+      if (!apiKey) continue
+      mergeProvider(providerID, {
+        source: "env",
+        key: provider.env.length === 1 ? apiKey : undefined,
+      })
+    }
+
+    // load apikeys from auth
+    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+      if (provider.type === "api") {
+        mergeProvider(providerID, {
+          source: "api",
+          key: provider.key,
+        })
+      }
+    }
+
+    // load config overrides
+    for (const [providerID, provider] of configProviders) {
+      const partial: Partial<Info> = { source: "config" }
+      if (provider.env) partial.env = provider.env
+      if (provider.name) partial.name = provider.name
+      if (provider.options) partial.options = provider.options
+      mergeProvider(providerID, partial)
+    }
+
+    for (const [providerID, provider] of Object.entries(providers)) {
+      const configProvider = config.provider?.[providerID]
+
+      for (const [modelID, model] of Object.entries(provider.models)) {
+        model.api.id = model.api.id ?? model.id ?? modelID
+        if (model.status === "deprecated") delete provider.models[modelID]
+        if (
+          (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
+          (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+        )
+          delete provider.models[modelID]
+
+        model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+
+        const configVariants = configProvider?.models?.[modelID]?.variants
+        if (configVariants && model.variants) {
+          const merged = mergeDeep(model.variants, configVariants)
+          model.variants = mapValues(
+            pickBy(merged, (v) => !v.disabled),
+            (v) => omit(v, ["disabled"]),
+          )
+        }
+      }
+
+      if (Object.keys(provider.models).length === 0) {
+        delete providers[providerID]
+        continue
+      }
+
+      log.info("found", { providerID })
+    }
+
+    return {
+      providers,
+    }
+  })
+
+  export async function list() {
+    return state().then((state) => state.providers)
+  }
+
+  export async function getProvider(providerID: string) {
+    return state().then((s) => s.providers[providerID])
+  }
+
+  export async function getModel(providerID: string, modelID: string) {
+    const s = await state()
+    const provider = s.providers[providerID]
+    if (!provider) {
+      const availableProviders = Object.keys(s.providers)
+      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+
+    const info = provider.models[modelID]
+    if (!info) {
+      const availableModels = Object.keys(provider.models)
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const suggestions = matches.map((m) => m.target)
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+    }
+    return info
+  }
+
+  // Stub: In Phase 1+, this will be replaced with XaiClient integration.
+  // For now, throw to make it clear this isn't connected yet.
+  export async function getLanguage(_model: Model): Promise<any> {
+    throw new Error("getLanguage stub: xAI native client not yet wired (Phase 1)")
+  }
+
+  export async function closest(providerID: string, query: string[]) {
+    const s = await state()
+    const provider = s.providers[providerID]
+    if (!provider) return undefined
+    for (const item of query) {
+      for (const modelID of Object.keys(provider.models)) {
+        if (modelID.includes(item))
+          return {
+            providerID,
+            modelID,
+          }
+      }
+    }
+  }
+
+  export async function getSmallModel(providerID: string) {
+    const cfg = await Config.get()
+
+    if (cfg.small_model) {
+      const parsed = parseModel(cfg.small_model)
+      return getModel(parsed.providerID, parsed.modelID)
+    }
+
+    const provider = await state().then((state) => state.providers[providerID])
+    if (provider) {
+      const priority = ["grok-4-fast", "grok-3-mini", "grok-code-fast-1"]
+      for (const item of priority) {
+        for (const model of Object.keys(provider.models)) {
+          if (model.includes(item)) return getModel(providerID, model)
+        }
+      }
+    }
+
+    return undefined
+  }
+
+  const priority = ["grok-4", "grok-3", "grok-code-fast-1"]
+  export function sort(models: Model[]) {
+    return sortBy(
+      models,
+      [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
+      [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
+      [(model) => model.id, "desc"],
+    )
+  }
+
+  export async function defaultModel() {
+    const cfg = await Config.get()
+    if (cfg.model) return parseModel(cfg.model)
+
+    const providers = await list()
+    const recent = (await Filesystem.readJson<{ recent?: { providerID: string; modelID: string }[] }>(
+      path.join(Global.Path.state, "model.json"),
+    )
+      .then((x) => (Array.isArray(x.recent) ? x.recent : []))
+      .catch(() => [])) as { providerID: string; modelID: string }[]
+    for (const entry of recent) {
+      const provider = providers[entry.providerID]
+      if (!provider) continue
+      if (!provider.models[entry.modelID]) continue
+      return { providerID: entry.providerID, modelID: entry.modelID }
+    }
+
+    const provider = Object.values(providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+    if (!provider) throw new Error("no providers found")
+    const [model] = sort(Object.values(provider.models))
+    if (!model) throw new Error("no models found")
+    return {
+      providerID: provider.id,
+      modelID: model.id,
+    }
+  }
+
+  export function parseModel(model: string) {
+    const [providerID, ...rest] = model.split("/")
+    return {
+      providerID: providerID,
+      modelID: rest.join("/"),
+    }
+  }
+
+  export const ModelNotFoundError = NamedError.create(
+    "ProviderModelNotFoundError",
+    z.object({
+      providerID: z.string(),
+      modelID: z.string(),
+      suggestions: z.array(z.string()).optional(),
+    }),
+  )
+
+  export const InitError = NamedError.create(
+    "ProviderInitError",
+    z.object({
+      providerID: z.string(),
+    }),
+  )
+}
