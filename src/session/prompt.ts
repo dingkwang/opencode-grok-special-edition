@@ -754,7 +754,7 @@ export namespace SessionPrompt {
       agent: input.agent.name,
       messages: input.messages,
       metadata: async (val: { title?: string; metadata?: any }) => {
-        const match = input.processor.partFromToolCall(options.toolCallId)
+        const match = input.processor.partFromToolCall(options.toolCallId!)
         if (match && match.state.status === "running") {
           await Session.updatePart({
             ...match,
@@ -774,7 +774,7 @@ export namespace SessionPrompt {
         await PermissionNext.ask({
           ...req,
           sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+          tool: { messageID: input.processor.message.id, callID: options.toolCallId! },
           ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
         })
       },
@@ -944,7 +944,7 @@ export namespace SessionPrompt {
           metadata: { valid: true },
         }
       },
-      toModelOutput(result) {
+      toModelOutput(result: any) {
         return {
           type: "text",
           value: result.output,

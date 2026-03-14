@@ -41,7 +41,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
 import { z } from "zod"
-import { LoadAPIKeyError } from "ai"
+import { LoadAPIKeyError } from "@/ai-stub"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse, ToolPart } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 

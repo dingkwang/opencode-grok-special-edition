@@ -32,16 +32,21 @@ export type UIMessage = {
 
 export type ToolCallOptions = {
   abortSignal?: AbortSignal
+  toolCallId?: string
+  messages?: ModelMessage[]
 }
 
 export type ToolResult = {
-  output: string
-  title: string
-  metadata: Record<string, any>
+  output?: string
+  title?: string
+  metadata?: Record<string, any>
   attachments?: any[]
+  content?: any
+  [key: string]: any
 }
 
 export type Tool<TInput = any, TOutput = ToolResult> = {
+  id?: string
   description?: string
   inputSchema?: any
   execute?: (input: TInput, options: ToolCallOptions) => Promise<TOutput>
@@ -75,15 +80,21 @@ export function wrapLanguageModel(input: { model: any; middleware?: any[] }): an
 }
 
 export function tool<TInput = any>(input: {
+  id?: string
   description?: string
   inputSchema?: any
   execute?: (input: TInput, options: ToolCallOptions) => Promise<any>
+  [key: string]: any
 }): Tool<TInput> {
   return input as Tool<TInput>
 }
 
-export function dynamicTool(factory: (name: string) => Tool | undefined): Tool {
-  return factory as any
+export function dynamicTool(input: {
+  description?: string
+  execute?: (input: any, options: ToolCallOptions) => Promise<any>
+  [key: string]: any
+}): Tool {
+  return input as Tool
 }
 
 export function jsonSchema(schema: any): any {

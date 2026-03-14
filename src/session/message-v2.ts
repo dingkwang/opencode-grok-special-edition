@@ -722,7 +722,7 @@ export namespace MessageV2 {
     return convertToModelMessages(
       result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
       {
-        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
+        // convertToModelMessages expects tools for toModelOutput mapping
         tools,
       },
     )

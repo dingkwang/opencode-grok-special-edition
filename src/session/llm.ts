@@ -170,12 +170,12 @@ export namespace LLM {
     }
 
     return streamText({
-      onError(error) {
+      onError(error: any) {
         l.error("stream error", {
           error,
         })
       },
-      async experimental_repairToolCall(failed) {
+      async experimental_repairToolCall(failed: any) {
         const lower = failed.toolCall.toolName.toLowerCase()
         if (lower !== failed.toolCall.toolName && tools[lower]) {
           l.info("repairing tool call", {
@@ -235,9 +235,8 @@ export namespace LLM {
         model: language,
         middleware: [
           {
-            async transformParams(args) {
+            async transformParams(args: any) {
               if (args.type === "stream") {
-                // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
               return args.params
