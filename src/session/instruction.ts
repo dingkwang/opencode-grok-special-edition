@@ -14,6 +14,7 @@ const log = Log.create({ service: "instruction" })
 const FILES = [
   "AGENTS.md",
   "CLAUDE.md",
+  "GROK.md",
   "CONTEXT.md", // deprecated
 ]
 
@@ -26,6 +27,8 @@ function globalFiles() {
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
     files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
   }
+  // Grok-specific global instructions
+  files.push(path.join(os.homedir(), ".grok", "GROK.md"))
   return files
 }
 
