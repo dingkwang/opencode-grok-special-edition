@@ -697,6 +697,17 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
+      serverTools: z
+        .object({
+          webSearch: z.boolean().optional(),
+          xSearch: z.boolean().optional(),
+          codeExecution: z.boolean().optional(),
+          collectionsSearch: z.boolean().optional(),
+          mcp: z.boolean().optional(),
+          attachmentSearch: z.boolean().optional(),
+        })
+        .optional()
+        .describe("Enable/disable server-side tools per agent (overrides global serverTools config)"),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -1147,6 +1158,94 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      serverTools: z
+        .object({
+          webSearch: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable web search server-side tool (default: false)"),
+              allowedDomains: z.array(z.string()).optional().describe("Only search these domains"),
+              excludedDomains: z.array(z.string()).optional().describe("Exclude these domains from search"),
+              enableImageUnderstanding: z.boolean().optional(),
+              userLocation: z
+                .object({
+                  country: z.string().optional(),
+                  city: z.string().optional(),
+                  region: z.string().optional(),
+                  timezone: z.string().optional(),
+                })
+                .optional(),
+            })
+            .optional(),
+          xSearch: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable X/Twitter search server-side tool (default: false)"),
+              fromDate: z.string().optional().describe("Start date for X search (ISO format)"),
+              toDate: z.string().optional().describe("End date for X search (ISO format)"),
+              allowedHandles: z.array(z.string()).optional(),
+              excludedHandles: z.array(z.string()).optional(),
+              enableImageUnderstanding: z.boolean().optional(),
+              enableVideoUnderstanding: z.boolean().optional(),
+            })
+            .optional(),
+          codeExecution: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable code execution server-side tool (default: false)"),
+            })
+            .optional(),
+          collectionsSearch: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable collections search server-side tool (default: false)"),
+              collectionIds: z.array(z.string()).optional().describe("Collection IDs to search"),
+              limit: z.number().int().positive().optional(),
+              instructions: z.string().optional(),
+            })
+            .optional(),
+          mcp: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable server-side MCP tool (default: false)"),
+              servers: z
+                .array(
+                  z.object({
+                    serverUrl: z.string().describe("MCP server URL"),
+                    serverLabel: z.string().describe("Display label for the MCP server"),
+                    serverDescription: z.string().optional(),
+                    allowedToolNames: z.array(z.string()).optional(),
+                    authorization: z.string().optional(),
+                    extraHeaders: z.record(z.string(), z.string()).optional(),
+                  }),
+                )
+                .optional(),
+            })
+            .optional(),
+          attachmentSearch: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable attachment search server-side tool (default: false)"),
+              limit: z.number().int().positive().optional(),
+            })
+            .optional(),
+        })
+        .optional()
+        .describe("xAI server-side tool configuration"),
+      searchParameters: z
+        .object({
+          mode: z.enum(["off", "on", "auto"]).optional().describe("Search mode"),
+          fromDate: z.string().optional().describe("Start date for search (ISO format)"),
+          toDate: z.string().optional().describe("End date for search (ISO format)"),
+          returnCitations: z.boolean().optional().describe("Include inline citations in responses"),
+          maxSearchResults: z.number().int().positive().optional(),
+        })
+        .optional()
+        .describe("xAI search parameters configuration"),
+      storeMessages: z
+        .boolean()
+        .optional()
+        .describe("Enable server-side message storage for conversation continuity"),
+      maxTurns: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum server-side agentic turns for server-side tool loops"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

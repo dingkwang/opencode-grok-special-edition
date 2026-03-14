@@ -1,6 +1,6 @@
 // XaiStream - streaming orchestrator that replaces Vercel AI SDK's streamText()
 import type { ModelMessage, ToolSet } from "@/ai-stub"
-import type { ChatCompletionRequest, ReasoningEffort, AgentCount, Tool as XaiTool } from "./types"
+import type { ChatCompletionRequest, ReasoningEffort, AgentCount, Tool as XaiTool, SearchParameters } from "./types"
 import { XaiClient, createXaiClient } from "./client"
 import { toXaiMessages, toXaiTools, chunkToEvents } from "./convert"
 import type { StreamEvent } from "./events"
@@ -23,6 +23,7 @@ export interface StreamInput {
   maxTurns?: number
   agentCount?: AgentCount
   include?: string[]
+  searchParameters?: SearchParameters
   abortSignal?: AbortSignal
   providerOptions?: Record<string, any>
   apiKey?: string
@@ -78,6 +79,9 @@ export namespace XaiStream {
     }
     if (include.length > 0) {
       request.include = include
+    }
+    if (input.searchParameters) {
+      request.search_parameters = input.searchParameters
     }
 
     // Merge any additional provider options

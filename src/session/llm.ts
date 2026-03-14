@@ -18,6 +18,7 @@ import { SystemPrompt } from "./system"
 import { PermissionNext } from "@/permission/next"
 import { XaiStream } from "@/xai/stream"
 import { adaptXaiStream, wrapAsFullStream } from "@/xai/adapter"
+import { configToServerTools, configToSearchParameters, configToInclude } from "@/xai/server-tools"
 import { Env } from "@/env"
 
 export namespace LLM {
@@ -125,6 +126,19 @@ export namespace LLM {
     // Get base URL from model API URL or provider options
     const baseUrl = input.model.api.url ?? provider?.options?.baseURL ?? undefined
 
+    // Build server-side tools from config
+    const serverTools = cfg.serverTools
+      ? configToServerTools(cfg.serverTools, input.agent.serverTools)
+      : []
+
+    // Build include list from server tools config
+    const include = cfg.serverTools ? configToInclude(cfg.serverTools) : []
+
+    // Build search parameters from config
+    const searchParameters = cfg.searchParameters
+      ? configToSearchParameters(cfg.searchParameters)
+      : undefined
+
     // Use xAI native streaming
     const xaiStream = XaiStream.stream({
       model: input.model.api.id,
@@ -138,10 +152,15 @@ export namespace LLM {
         ...input.messages,
       ],
       tools,
+      serverTools,
       maxTokens: maxOutputTokens,
       temperature: params.temperature,
       topP: params.topP,
       reasoningEffort: options.reasoningEffort,
+      storeMessages: cfg.storeMessages,
+      maxTurns: cfg.maxTurns,
+      include,
+      searchParameters,
       abortSignal: input.abort,
       apiKey,
       baseUrl,

@@ -44,6 +44,16 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      serverTools: z
+        .object({
+          webSearch: z.boolean().optional(),
+          xSearch: z.boolean().optional(),
+          codeExecution: z.boolean().optional(),
+          collectionsSearch: z.boolean().optional(),
+          mcp: z.boolean().optional(),
+          attachmentSearch: z.boolean().optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Agent",
@@ -229,6 +239,7 @@ export namespace Agent {
       item.hidden = value.hidden ?? item.hidden
       item.name = value.name ?? item.name
       item.steps = value.steps ?? item.steps
+      if (value.serverTools) item.serverTools = { ...item.serverTools, ...value.serverTools }
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }
