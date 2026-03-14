@@ -675,6 +675,7 @@ export namespace SessionPrompt {
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
+        previousResponseId: lastFinished?.responseId,
       })
 
       // If structured output was captured, save it and exit immediately

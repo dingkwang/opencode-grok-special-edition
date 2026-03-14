@@ -250,6 +250,11 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  // Capture xAI response ID for server-side session persistence
+                  const xaiResponseId = value.providerMetadata?.xai?.responseId
+                  if (xaiResponseId) {
+                    input.assistantMessage.responseId = xaiResponseId
+                  }
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,

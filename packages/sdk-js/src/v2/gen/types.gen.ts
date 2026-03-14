@@ -508,6 +508,21 @@ export type CompactionPart = {
   overflow?: boolean
 }
 
+export type CitationPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "citation"
+  citations: Array<{
+    id: string
+    startIndex: number
+    endIndex: number
+    source: "web" | "x" | "collections"
+    url?: string
+    fileId?: string
+  }>
+}
+
 export type Part =
   | TextPart
   | SubtaskPart
@@ -521,6 +536,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | CitationPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"

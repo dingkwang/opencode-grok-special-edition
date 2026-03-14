@@ -37,6 +37,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    previousResponseId?: string
   }
 
   export type StreamOutput = { fullStream: AsyncIterable<any> }
@@ -158,6 +159,7 @@ export namespace LLM {
       topP: params.topP,
       reasoningEffort: options.reasoningEffort,
       storeMessages: cfg.storeMessages,
+      previousResponseId: input.previousResponseId,
       maxTurns: cfg.maxTurns,
       include,
       searchParameters,

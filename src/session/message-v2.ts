@@ -373,6 +373,23 @@ export namespace MessageV2 {
   })
   export type User = z.infer<typeof User>
 
+  export const CitationPart = PartBase.extend({
+    type: z.literal("citation"),
+    citations: z.array(
+      z.object({
+        id: z.string(),
+        startIndex: z.number(),
+        endIndex: z.number(),
+        source: z.enum(["web", "x", "collections"]),
+        url: z.string().optional(),
+        fileId: z.string().optional(),
+      }),
+    ),
+  }).meta({
+    ref: "CitationPart",
+  })
+  export type CitationPart = z.infer<typeof CitationPart>
+
   export const Part = z
     .discriminatedUnion("type", [
       TextPart,
@@ -387,6 +404,7 @@ export namespace MessageV2 {
       AgentPart,
       RetryPart,
       CompactionPart,
+      CitationPart,
     ])
     .meta({
       ref: "Part",
@@ -437,6 +455,7 @@ export namespace MessageV2 {
     structured: z.any().optional(),
     variant: z.string().optional(),
     finish: z.string().optional(),
+    responseId: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
   })
