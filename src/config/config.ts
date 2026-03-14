@@ -1246,6 +1246,14 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Maximum server-side agentic turns for server-side tool loops"),
+      agentCount: z
+        .union([z.literal(4), z.literal(16)])
+        .optional()
+        .describe("Number of parallel server-side agents (4 or 16). Each agent processes the query independently."),
+      include: z
+        .array(z.string())
+        .optional()
+        .describe("xAI include options for streaming (e.g., 'inline_citations', 'verbose_streaming')"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

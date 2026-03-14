@@ -29,7 +29,7 @@ import {
   RGBA,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart, CitationPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -1401,6 +1401,7 @@ const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
   reasoning: ReasoningPart,
+  citation: CitationPartView,
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
@@ -1431,6 +1432,24 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           conceal={ctx.conceal()}
           fg={theme.textMuted}
         />
+      </box>
+    </Show>
+  )
+}
+
+function CitationPartView(props: { last: boolean; part: CitationPart; message: AssistantMessage }) {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.part.citations.length > 0}>
+      <box paddingLeft={3} marginTop={1} flexDirection="column">
+        <text fg={theme.textMuted}>Citations:</text>
+        <For each={props.part.citations}>
+          {(citation, i) => (
+            <text fg={theme.textMuted} paddingLeft={1}>
+              [{i() + 1}] {citation.url ?? citation.fileId ?? citation.source}
+            </text>
+          )}
+        </For>
       </box>
     </Show>
   )

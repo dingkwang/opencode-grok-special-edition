@@ -132,8 +132,11 @@ export namespace LLM {
       ? configToServerTools(cfg.serverTools, input.agent.serverTools)
       : []
 
-    // Build include list from server tools config
-    const include = cfg.serverTools ? configToInclude(cfg.serverTools) : []
+    // Build include list from server tools config + user overrides
+    const include = [
+      ...(cfg.serverTools ? configToInclude(cfg.serverTools) : []),
+      ...(cfg.include ?? []),
+    ]
 
     // Build search parameters from config
     const searchParameters = cfg.searchParameters
@@ -161,6 +164,7 @@ export namespace LLM {
       storeMessages: cfg.storeMessages,
       previousResponseId: input.previousResponseId,
       maxTurns: cfg.maxTurns,
+      agentCount: cfg.agentCount as 4 | 16 | undefined,
       include,
       searchParameters,
       abortSignal: input.abort,
