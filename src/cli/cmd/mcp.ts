@@ -381,11 +381,11 @@ export const McpLogoutCommand = cmd({
 })
 
 async function resolveConfigPath(baseDir: string, global = false) {
-  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
-  const candidates = [path.join(baseDir, "opencode.json"), path.join(baseDir, "opencode.jsonc")]
+  // Check for existing config files (prefer .jsonc over .json, check .opencode-grok/ subdirectory too)
+  const candidates = [path.join(baseDir, "opencode-grok.json"), path.join(baseDir, "opencode-grok.jsonc")]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".opencode", "opencode.json"), path.join(baseDir, ".opencode", "opencode.jsonc"))
+    candidates.push(path.join(baseDir, ".opencode-grok", "opencode-grok.json"), path.join(baseDir, ".opencode-grok", "opencode-grok.jsonc"))
   }
 
   for (const candidate of candidates) {
@@ -394,7 +394,7 @@ async function resolveConfigPath(baseDir: string, global = false) {
     }
   }
 
-  // Default to opencode.json if none exist
+  // Default to opencode-grok.json if none exist
   return candidates[0]
 }
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "xai": {
+      "env": ["XAI_API_KEY"]
+    }
+  },
+  "agent": {
+    "default": {
+      "model": "xai/grok-code-fast-1"
+    }
+  }}
