@@ -1,6 +1,6 @@
-# Grok Code
+# opencode-grok-special-edition
 
-A Grok-only fork of [OpenCode](https://github.com/anomalyco/opencode) — the open source AI coding agent — stripped down to use xAI's native API directly instead of the Vercel AI SDK.
+A Grok-only fork of [OpenCode](https://github.com/anomalyco/opencode) — the open source AI coding agent — packaged as `opencode-grok-special-edition` and stripped down to use xAI's native API directly instead of the Vercel AI SDK.
 
 This gives full access to xAI-specific features that generic provider abstractions can't expose: server-side tools (web search, X search, code execution, collections, MCP, attachments), inline citations, server-side session persistence, multi-agent, and agentic loops.
 
@@ -90,7 +90,7 @@ Example `opencode-grok.json`:
 
 ### Custom Instructions
 
-Grok Code loads instruction files from these locations:
+`opencode-grok-special-edition` loads instruction files from these locations:
 
 - `GROK.md` — project-level (walks up from cwd)
 - `~/.grok/GROK.md` — global
