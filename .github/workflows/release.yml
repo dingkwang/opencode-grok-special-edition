@@ -10,7 +10,27 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: linux-x64
+            archive: opencode-grok-linux-x64
+          - runner: ubuntu-latest
+            target: linux-x64-baseline
+            archive: opencode-grok-linux-x64-baseline
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            archive: opencode-grok-linux-arm64
+          - runner: macos-13
+            target: darwin-x64
+            archive: opencode-grok-darwin-x64
+          - runner: macos-14
+            target: darwin-arm64
+            archive: opencode-grok-darwin-arm64
+
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -24,16 +44,13 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build release binaries
-        run: bun run build:all
+      - name: Build release binary
+        run: bun run script/build.ts ${{ matrix.target }}
 
-      - name: Archive artifacts
+      - name: Archive artifact
         run: |
           mkdir -p release
-          for dir in dist/opencode-grok-*; do
-            base="$(basename "$dir")"
-            tar -C dist -czf "release/${base}.tar.gz" "$base"
-          done
+          tar -C dist -czf "release/${{ matrix.archive }}.tar.gz" "${{ matrix.archive }}"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

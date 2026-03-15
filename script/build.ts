@@ -47,6 +47,7 @@ const migrations = await Promise.all(
 console.log(`Loaded ${migrations.length} migrations`)
 
 const singleFlag = process.argv.includes("--single")
+const targetArg = process.argv.slice(2).find((arg) => !arg.startsWith("--"))
 
 const allTargets: {
   os: string
@@ -61,14 +62,32 @@ const allTargets: {
   { os: "darwin", arch: "x64" },
 ]
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
+const nativeTargets = allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) return false
-      if (item.avx2 === false) return false
       if (item.abi !== undefined) return false
       return true
     })
-  : allTargets
+
+const targets = targetArg
+  ? allTargets.filter((item) => {
+      const name = [
+        "opencode-grok",
+        item.os === "win32" ? "windows" : item.os,
+        item.arch,
+        item.avx2 === false ? "baseline" : undefined,
+        item.abi === undefined ? undefined : item.abi,
+      ]
+        .filter(Boolean)
+        .join("-")
+      return name === targetArg
+    })
+  : singleFlag
+    ? nativeTargets.filter((item) => item.avx2 !== false)
+    : allTargets
+
+if (targetArg && targets.length === 0) {
+  throw new Error(`Unknown build target: ${targetArg}`)
+}
 
 await $`rm -rf dist`
 
