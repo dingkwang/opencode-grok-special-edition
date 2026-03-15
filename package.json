@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 30000",
     "dev": "bun run --conditions=browser ./src/index.ts",
+    "build": "bun run script/build.ts --single",
+    "build:all": "bun run script/build.ts",
     "clean": "rm -rf node_modules dist",
     "db": "bun drizzle-kit"
   },
