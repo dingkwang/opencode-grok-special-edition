@@ -10,6 +10,9 @@ This gives full access to xAI-specific features that generic provider abstractio
 # Set your xAI API key
 export XAI_API_KEY="xai-..."
 
+# Install the latest release binary
+curl -fsSL https://raw.githubusercontent.com/dingkwang/opencode-grok-special-edition/main/install.sh | bash
+
 # Run from source
 bun install
 bun run dev
@@ -17,6 +20,12 @@ bun run dev
 # Or build a standalone binary
 bun run build
 ./dist/opencode-grok-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/')/bin/opencode-grok
+```
+
+Install a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dingkwang/opencode-grok-special-edition/main/install.sh | VERSION=0.1.0 bash
 ```
 
 ## Building

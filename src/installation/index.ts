@@ -14,6 +14,8 @@ declare global {
 
 export namespace Installation {
   const log = Log.create({ service: "installation" })
+  const githubRepo = "dingkwang/opencode-grok-special-edition"
+  const installScriptURL = `https://raw.githubusercontent.com/${githubRepo}/main/install.sh`
 
   export type Method = Awaited<ReturnType<typeof method>>
 
@@ -132,7 +134,7 @@ export namespace Installation {
     let cmd
     switch (method) {
       case "curl":
-        cmd = $`curl -fsSL https://opencode.ai/install | bash`.env({
+        cmd = $`curl -fsSL ${installScriptURL} | bash`.env({
           ...process.env,
           VERSION: target,
         })
@@ -251,7 +253,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
+    return fetch(`https://api.github.com/repos/${githubRepo}/releases/latest`)
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()
