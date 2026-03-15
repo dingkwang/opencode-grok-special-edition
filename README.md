@@ -105,6 +105,152 @@ Example `opencode-grok.json`:
 - `~/.grok/GROK.md` — global
 - `CLAUDE.md`, `AGENTS.md` — also supported (inherited from OpenCode)
 
+## Grok-Exclusive Features
+
+These features are only available through xAI's native API and cannot be accessed via generic provider abstractions like the Vercel AI SDK.
+
+### Server-Side Tools
+
+Tools executed on xAI's servers — no local resources consumed. The model decides when to call them automatically based on the conversation.
+
+| Tool | Purpose | Config Key |
+|---|---|---|
+| Web Search | Real-time internet search | `webSearch` |
+| X Search | Search X/Twitter posts | `xSearch` |
+| Code Execution | Sandboxed code execution on xAI servers | `codeExecution` |
+| Collections Search | Search your uploaded document collections | `collectionsSearch` |
+| Server-Side MCP | xAI-hosted MCP server calls | `mcp` |
+| Attachment Search | Search file attachments | `attachmentSearch` |
+
+Enable in `opencode-grok.json`:
+
+```jsonc
+{
+  "serverTools": {
+    "webSearch": {
+      "enabled": true,
+      "allowedDomains": ["github.com", "stackoverflow.com"]
+    },
+    "codeExecution": { "enabled": true },
+    "xSearch": {
+      "enabled": true,
+      "fromDate": "2025-01-01",
+      "allowedHandles": ["elonmusk"]
+    }
+  }
+}
+```
+
+### Inline Citations
+
+When `webSearch` or `xSearch` is enabled, model responses automatically include source references (URLs, tweet links) rendered as a `Citations:` block in the TUI.
+
+```jsonc
+{
+  "searchParameters": {
+    "returnCitations": true
+  }
+}
+```
+
+### Server-Side Session Persistence
+
+xAI remembers previous conversation turns server-side via `previous_response_id`, reducing token transmission on each request.
+
+```jsonc
+{
+  "storeMessages": true
+}
+```
+
+Works automatically once enabled — each assistant response saves its `responseId`, and the next request includes it.
+
+### Multi-Agent (Parallel)
+
+Spin up multiple xAI agent instances to process the same query in parallel; the best result is selected.
+
+```jsonc
+{
+  "agentCount": 4    // or 16
+}
+```
+
+### Server-Side Agentic Loop
+
+The model autonomously loops through tool calls on xAI's servers (e.g., search -> read -> search again) without client round-trips.
+
+```jsonc
+{
+  "maxTurns": 10
+}
+```
+
+### Per-Agent Server Tool Overrides
+
+Different agents can have different server-side tools enabled:
+
+```jsonc
+{
+  "serverTools": {
+    "webSearch": { "enabled": true },
+    "codeExecution": { "enabled": true }
+  },
+  "agent": {
+    "build": {
+      "serverTools": { "webSearch": true, "codeExecution": true }
+    },
+    "plan": {
+      "serverTools": { "webSearch": true, "codeExecution": false }
+    }
+  }
+}
+```
+
+### Reasoning Effort
+
+Control Grok's reasoning depth via model variants:
+
+```jsonc
+{
+  "provider": {
+    "xai": {
+      "models": {
+        "grok-3": {
+          "variants": {
+            "think": { "reasoningEffort": "high" },
+            "fast": { "reasoningEffort": "low" }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### GROK.md Custom Instructions
+
+In addition to `CLAUDE.md` and `AGENTS.md`, Grok Code loads:
+- `./GROK.md` — project-level (walks up to git root)
+- `~/.grok/GROK.md` — global
+
+### Minimal Quick-Start Config
+
+```jsonc
+// opencode-grok.json
+{
+  "serverTools": {
+    "webSearch": { "enabled": true },
+    "codeExecution": { "enabled": true }
+  },
+  "storeMessages": true,
+  "searchParameters": {
+    "returnCitations": true
+  }
+}
+```
+
+No manual triggering needed — the model automatically invokes server-side tools when relevant to the conversation.
+
 ## Models
 
 Static model registry (no external API calls):
