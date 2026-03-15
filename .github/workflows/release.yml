@@ -9,25 +9,22 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
-            target: linux-x64
+            target: opencode-grok-linux-x64
             archive: opencode-grok-linux-x64
           - runner: ubuntu-latest
-            target: linux-x64-baseline
+            target: opencode-grok-linux-x64-baseline
             archive: opencode-grok-linux-x64-baseline
           - runner: ubuntu-24.04-arm
-            target: linux-arm64
+            target: opencode-grok-linux-arm64
             archive: opencode-grok-linux-arm64
-          - runner: macos-13
-            target: darwin-x64
-            archive: opencode-grok-darwin-x64
           - runner: macos-14
-            target: darwin-arm64
+            target: opencode-grok-darwin-arm64
             archive: opencode-grok-darwin-arm64
 
     runs-on: ${{ matrix.runner }}
@@ -51,6 +48,24 @@ jobs:
         run: |
           mkdir -p release
           tar -C dist -czf "release/${{ matrix.archive }}.tar.gz" "${{ matrix.archive }}"
+
+      - name: Upload archived artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: release/${{ matrix.archive }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download archived artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: opencode-grok-*
+          merge-multiple: true
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
