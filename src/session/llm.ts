@@ -25,6 +25,10 @@ export namespace LLM {
   const log = Log.create({ service: "llm" })
   export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
+  function supportsClientTools(modelID: string) {
+    return !modelID.includes("multi-agent-beta")
+  }
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -119,7 +123,7 @@ export namespace LLM {
     )
 
     const maxOutputTokens = ProviderTransform.maxOutputTokens(input.model)
-    const tools = await resolveTools(input)
+    const tools = supportsClientTools(input.model.id) ? await resolveTools(input) : {}
 
     // Get API key from provider or environment
     const apiKey = provider?.key ?? Env.get("XAI_API_KEY")

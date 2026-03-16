@@ -25,8 +25,10 @@ bun run build
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dingkwang/opencode-grok-special-edition/main/install.sh | VERSION=0.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/dingkwang/opencode-grok-special-edition/main/install.sh | VERSION=0.1.1 bash
 ```
+
+The installer downloads the matching GitHub Release binary for your platform and installs `opencode-grok` to `~/.local/bin` by default.
 
 ## Building
 
@@ -36,6 +38,29 @@ bun run build:all    # Build for all platforms (linux arm64/x64, darwin arm64/x6
 ```
 
 The binary is output to `dist/opencode-grok-<platform>-<arch>/bin/opencode-grok`.
+
+## Releases
+
+GitHub releases are published from tags like `v0.1.1` and include standalone tarballs built by GitHub Actions.
+
+Current published targets:
+
+- `opencode-grok-linux-x64.tar.gz`
+- `opencode-grok-linux-x64-baseline.tar.gz`
+- `opencode-grok-linux-arm64.tar.gz`
+- `opencode-grok-darwin-arm64.tar.gz`
+
+Release page:
+
+```text
+https://github.com/dingkwang/opencode-grok-special-edition/releases
+```
+
+Latest release example:
+
+```text
+https://github.com/dingkwang/opencode-grok-special-edition/releases/tag/v0.1.1
+```
 
 ## Configuration
 
@@ -257,11 +282,16 @@ Static model registry (no external API calls):
 
 | Model | ID |
 |---|---|
+| Grok 4.20 Beta | `xai/grok-4.20-beta-latest` |
+| Grok 4.20 Beta Non-Reasoning | `xai/grok-4.20-beta-latest-non-reasoning` |
+| Grok 4.20 Multi-Agent Beta | `xai/grok-4.20-multi-agent-beta-0309` |
 | Grok 4 | `xai/grok-4` |
 | Grok 4 Fast | `xai/grok-4-fast` |
 | Grok 3 | `xai/grok-3` |
 | Grok 3 Mini | `xai/grok-3-mini` |
 | Grok Code Fast | `xai/grok-code-fast-1` |
+
+`xai/grok-4.20-multi-agent-beta-0309` is wired as a server-tools-first model: this fork does not send local custom tools to it, because xAI documents the multi-agent beta as using built-in server-side tools rather than client-side custom tools.
 
 ## Architecture
 
