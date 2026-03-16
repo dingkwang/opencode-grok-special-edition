@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "name": "opencode-grok-special-edition",
   "type": "module",
   "license": "MIT",

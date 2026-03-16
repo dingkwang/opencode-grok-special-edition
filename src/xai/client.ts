@@ -2,6 +2,8 @@ import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
   ChatCompletionChunk,
+  ResponsesRequest,
+  ResponsesResponse,
   StartDeferredResponse,
   GetDeferredResponse,
   DeleteStoredCompletionResponse,
@@ -223,6 +225,30 @@ export class XaiClient {
         message: `xAI delete stored response error: ${response.status}`,
         statusCode: response.status,
         responseBody,
+        url,
+      })
+    }
+
+    return response.json()
+  }
+
+  async responses(request: ResponsesRequest): Promise<ResponsesResponse> {
+    const url = `${this.baseUrl}/responses`
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(this.timeout),
+    })
+
+    if (!response.ok) {
+      const responseBody = await response.text().catch(() => "")
+      throw new APICallError({
+        message: `xAI API error: ${response.status} ${response.statusText}`,
+        statusCode: response.status,
+        responseBody,
+        isRetryable: response.status >= 500 || response.status === 429,
         url,
       })
     }
