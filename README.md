@@ -25,7 +25,7 @@ bun run build
 Install a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dingkwang/opencode-grok-special-edition/main/install.sh | VERSION=0.1.1 bash
+curl -fsSL https://raw.githubusercontent.com/dingkwang/opencode-grok-special-edition/main/install.sh | VERSION=0.1.2 bash
 ```
 
 The installer downloads the matching GitHub Release binary for your platform and installs `opencode-grok` to `~/.local/bin` by default.
@@ -41,7 +41,7 @@ The binary is output to `dist/opencode-grok-<platform>-<arch>/bin/opencode-grok`
 
 ## Releases
 
-GitHub releases are published from tags like `v0.1.1` and include standalone tarballs built by GitHub Actions.
+GitHub releases are published from tags like `v0.1.2` and include standalone tarballs built by GitHub Actions.
 
 Current published targets:
 
@@ -59,7 +59,7 @@ https://github.com/dingkwang/opencode-grok-special-edition/releases
 Latest release example:
 
 ```text
-https://github.com/dingkwang/opencode-grok-special-edition/releases/tag/v0.1.1
+https://github.com/dingkwang/opencode-grok-special-edition/releases/tag/v0.1.2
 ```
 
 ## Configuration

@@ -124,15 +124,21 @@ export function configToSearchParameters(
 export function configToInclude(config: ServerToolsConfig): string[] {
   const include: string[] = []
 
-  if (config.webSearch?.enabled) include.push("web_search_call.output")
-  if (config.xSearch?.enabled) include.push("x_search_call.output")
-  if (config.codeExecution?.enabled) include.push("code_execution_call.output")
-  if (config.collectionsSearch?.enabled) include.push("collections_search_call.output")
-  if (config.attachmentSearch?.enabled) include.push("attachment_search_call.output")
-  if (config.mcp?.enabled) include.push("mcp_call.output")
+  const hasServerTool =
+    config.webSearch?.enabled ||
+    config.xSearch?.enabled ||
+    config.codeExecution?.enabled ||
+    config.collectionsSearch?.enabled ||
+    config.attachmentSearch?.enabled ||
+    config.mcp?.enabled
+
+  // xAI's current chat/tool docs use high-level include flags rather than
+  // per-tool "*.output" selectors. The older selectors cause 422 validation
+  // errors on tool-enabled requests.
+  if (hasServerTool) include.push("verbose_streaming")
 
   // Always include inline citations when any search tool is enabled
-  if (include.length > 0) include.push("inline_citations")
+  if (config.webSearch?.enabled || config.xSearch?.enabled) include.push("inline_citations")
 
   return include
 }
