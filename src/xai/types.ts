@@ -219,6 +219,92 @@ export interface ChatCompletionRequest {
   user?: string
 }
 
+export interface ResponsesInputMessage {
+  role: "system" | "user" | "assistant" | "tool" | "developer"
+  content: string | Content[]
+}
+
+export interface ResponsesTool {
+  type: "function" | "web_search" | "x_search"
+  name?: string
+  description?: string
+  parameters?: Record<string, any>
+  filters?: {
+    allowed_domains?: string[]
+    excluded_domains?: string[]
+  }
+  from_date?: string
+  to_date?: string
+  allowed_x_handles?: string[]
+  excluded_x_handles?: string[]
+  enable_image_understanding?: boolean
+  enable_video_understanding?: boolean
+}
+
+export interface ResponsesRequest {
+  model: string
+  input: ResponsesInputMessage[]
+  tools?: ResponsesTool[]
+  store?: boolean
+  previous_response_id?: string
+  stream?: boolean
+  temperature?: number
+  top_p?: number
+  tool_choice?: "auto" | "required" | "none"
+}
+
+export interface ResponsesOutputText {
+  type: "output_text"
+  text: string
+  annotations?: Array<{
+    type: string
+    url?: string
+    start_index?: number
+    end_index?: number
+    title?: string
+  }>
+}
+
+export interface ResponsesOutputItem {
+  id?: string
+  type: string
+  status?: string
+  role?: string
+  name?: string
+  call_id?: string
+  input?: string
+  arguments?: string
+  content?: ResponsesOutputText[]
+}
+
+export interface ResponsesUsage {
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
+  input_tokens_details?: {
+    cached_tokens?: number
+  }
+  output_tokens_details?: {
+    reasoning_tokens?: number
+  }
+  server_side_tool_usage_details?: {
+    web_search_calls?: number
+    x_search_calls?: number
+  }
+}
+
+export interface ResponsesResponse {
+  id: string
+  model: string
+  status: string
+  output: ResponsesOutputItem[]
+  usage?: ResponsesUsage
+  error?: {
+    code?: string
+    message?: string
+  } | null
+}
+
 // ─── Response Types ─────────────────────────────────────────────────────────
 
 export interface InlineCitation {
